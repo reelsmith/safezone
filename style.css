@@ -276,6 +276,30 @@ textarea:disabled, input:disabled { opacity: 0.5; }
 .status[data-status="warn"] { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .status[data-status="bad"]  { color: var(--bad);  background: color-mix(in srgb, var(--bad) 12%, transparent); }
 
+/* ---------------------------------------------------------------- button */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.05s;
+}
+
+.btn-primary svg { width: 18px; height: 18px; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:active { transform: translateY(1px); }
+.btn-primary:disabled { opacity: 0.6; cursor: progress; }
+
 /* ---------------------------------------------------------------- legend */
 
 .legend {

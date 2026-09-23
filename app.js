@@ -41,6 +41,7 @@
     textSize: $('textSize'),
     textSizeOut: $('textSizeOut'),
     textStatus: $('textStatus'),
+    download: $('download'),
   };
   const ctx = els.canvas.getContext('2d');
 
@@ -461,6 +462,160 @@
     els.textSize.addEventListener('change', savePrefs);
   }
 
+  /* ------------------------------------------------------------ export */
+
+  const toPx = (r) => ({ x: (r.x / 100) * W, y: (r.y / 100) * H, w: (r.w / 100) * W, h: (r.h / 100) * H });
+
+  function roundRect(c, x, y, w, h, rad) {
+    c.beginPath();
+    if (c.roundRect) c.roundRect(x, y, w, h, rad);
+    else c.rect(x, y, w, h);
+  }
+
+  /** Small dark pill label in the top-left corner of a rect, like the DOM labels. */
+  function drawLabel(c, text, r, bg) {
+    const size = 26;
+    c.font = '600 ' + size + 'px ' + FONT;
+    c.textAlign = 'left';
+    c.textBaseline = 'middle';
+    const maxW = r.w - 16 - 24;
+    let t = text;
+    if (c.measureText(t).width > maxW) {
+      while (t.length > 1 && c.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+      t += '…';
+    }
+    const w = c.measureText(t).width + 24;
+    const h = size * 1.45;
+    c.fillStyle = bg;
+    roundRect(c, r.x + 8, r.y + 8, w, h, 12);
+    c.fill();
+    c.fillStyle = '#fff';
+    c.fillText(t, r.x + 20, r.y + 8 + h / 2 + 1);
+  }
+
+  /** Word-wraps text to maxWidth using the context's current font. */
+  function wrapLines(c, text, maxWidth) {
+    const out = [];
+    String(text).split('\n').forEach((para) => {
+      const words = para.split(/(\s+)/);
+      let line = '';
+      words.forEach((word) => {
+        const next = line + word;
+        if (!line || c.measureText(next).width <= maxWidth) { line = next; return; }
+        out.push(line.trimEnd());
+        line = word.trimStart();
+        // Hard-break a single word that is still too wide.
+        while (line && c.measureText(line).width > maxWidth) {
+          let i = line.length - 1;
+          while (i > 1 && c.measureText(line.slice(0, i)).width > maxWidth) i--;
+          out.push(line.slice(0, i));
+          line = line.slice(i);
+        }
+      });
+      out.push(line.trimEnd());
+    });
+    return out;
+  }
+
+  function drawTextBox(c, status) {
+    const r = toPx(state.box);
+    const fs = state.textSize;
+    const pad = fs * 0.2;
+    const lh = fs * 1.2;
+    c.font = '800 ' + fs + 'px ' + FONT;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const lines = wrapLines(c, state.text, Math.max(1, r.w - pad * 2));
+    const blockH = lines.length * lh;
+    let y = r.y + r.h / 2 - blockH / 2 + lh / 2;
+    c.lineJoin = 'round';
+    c.lineWidth = fs * 0.14; // same as the CSS -webkit-text-stroke with paint-order: stroke
+    c.strokeStyle = 'rgba(0,0,0,0.85)';
+    c.fillStyle = '#fff';
+    lines.forEach((ln) => {
+      c.strokeText(ln, r.x + r.w / 2, y);
+      c.fillText(ln, r.x + r.w / 2, y);
+      y += lh;
+    });
+    const color = { ok: '#22c55e', warn: '#f59e0b', bad: '#ef4444' }[status] || '#fff';
+    c.save();
+    c.strokeStyle = color;
+    c.lineWidth = 5;
+    if (status !== 'bad') c.setLineDash([18, 12]);
+    c.strokeRect(r.x, r.y, r.w, r.h);
+    c.restore();
+  }
+
+  /** Composites frame + overlays + text box onto a fresh 1080x1920 canvas. */
+  function renderExport() {
+    const out = document.createElement('canvas');
+    out.width = W;
+    out.height = H;
+    const c = out.getContext('2d');
+    drawFrame();
+    c.drawImage(els.canvas, 0, 0);
+
+    const p = getPlatform(state.platform);
+    const result = state.showText ? evaluateText() : null;
+    const hitIds = new Set(result ? result.hits.map((z) => z.id) : []);
+
+    if (state.showZones) {
+      p.zones.forEach((z) => {
+        const r = toPx(z);
+        const color = KINDS[z.kind].color;
+        c.globalAlpha = state.opacity;
+        c.fillStyle = color;
+        c.fillRect(r.x, r.y, r.w, r.h);
+        c.globalAlpha = 1;
+        c.lineWidth = hitIds.has(z.id) ? 10 : 3;
+        c.strokeStyle = hitIds.has(z.id) ? '#ef4444' : color;
+        c.strokeRect(r.x + c.lineWidth / 2, r.y + c.lineWidth / 2, r.w - c.lineWidth, r.h - c.lineWidth);
+        if (state.showLabels && !p.combined) drawLabel(c, z.label, r, 'rgba(0,0,0,0.62)');
+      });
+    }
+
+    if (state.showSafe && p.safe.w > 0 && p.safe.h > 0) {
+      const r = toPx(p.safe);
+      c.save();
+      c.setLineDash([24, 14]);
+      c.lineWidth = 5;
+      c.strokeStyle = SAFE_COLOR;
+      c.strokeRect(r.x, r.y, r.w, r.h);
+      c.restore();
+      if (state.showLabels) drawLabel(c, 'Safe area', r, 'rgba(22,101,52,0.85)');
+    }
+
+    if (result) drawTextBox(c, result.status);
+    return out;
+  }
+
+  function exportPng() {
+    els.download.disabled = true;
+    let canvas;
+    try {
+      canvas = renderExport();
+    } catch (err) {
+      els.download.disabled = false;
+      setHint('Export failed: ' + err.message, true);
+      return;
+    }
+    canvas.toBlob((blob) => {
+      els.download.disabled = false;
+      if (!blob) {
+        setHint('Export failed: the browser could not encode the PNG.', true);
+        return;
+      }
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'safezone-' + state.platform + '-' + stamp + '.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }, 'image/png');
+  }
+
   /* ------------------------------------------------------------ sync UI */
 
   function syncControls() {
@@ -518,6 +673,8 @@
       els.overlay.style.setProperty('--zone-alpha', String(state.opacity));
     });
     els.opacity.addEventListener('change', savePrefs);
+
+    els.download.addEventListener('click', exportPng);
 
     els.file.addEventListener('change', () => {
       loadFile(els.file.files[0]);
