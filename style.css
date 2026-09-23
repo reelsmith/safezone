@@ -190,6 +190,92 @@ a { color: var(--accent); }
 
 .safe-label { background: rgba(22, 101, 52, 0.85); }
 
+/* -------------------------------------------------------------- text box */
+
+.textbox {
+  --fs: 64;                 /* font size in frame px, set by app.js */
+  --status: #ffffff;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--status);
+  border-radius: 4px;
+  cursor: grab;
+  touch-action: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.textbox[hidden] { display: none; }
+.textbox.is-dragging { cursor: grabbing; }
+.textbox:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.textbox[data-status="ok"]   { --status: #22c55e; }
+.textbox[data-status="warn"] { --status: #f59e0b; }
+.textbox[data-status="bad"]  { --status: #ef4444; background: rgba(239, 68, 68, 0.18); border-style: solid; }
+
+.textbox-text {
+  width: 100%;
+  padding: 0.2em;
+  color: #fff;
+  font-family: var(--font);
+  font-weight: 800;
+  font-size: calc(var(--fs) * var(--k) * 1px);
+  line-height: 1.2;
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-text-stroke: 0.14em rgba(0, 0, 0, 0.85);
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+
+.textbox-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--status);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: nwse-resize;
+}
+
+/* Larger touch target without a larger visual dot. */
+.textbox-handle::after { content: ""; position: absolute; inset: -12px; }
+
+textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+textarea:disabled, input:disabled { opacity: 0.5; }
+
+.status {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.status:empty { display: none; }
+.status[data-status="ok"]   { color: var(--ok);   background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.status[data-status="warn"] { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.status[data-status="bad"]  { color: var(--bad);  background: color-mix(in srgb, var(--bad) 12%, transparent); }
+
 /* ---------------------------------------------------------------- legend */
 
 .legend {

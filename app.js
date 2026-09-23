@@ -33,6 +33,14 @@
     showSafe: $('showSafe'),
     opacity: $('opacity'),
     opacityOut: $('opacityOut'),
+    textbox: $('textbox'),
+    textboxText: $('textboxText'),
+    textboxHandle: $('textboxHandle'),
+    showText: $('showText'),
+    textInput: $('textInput'),
+    textSize: $('textSize'),
+    textSizeOut: $('textSizeOut'),
+    textStatus: $('textStatus'),
   };
   const ctx = els.canvas.getContext('2d');
 
@@ -45,12 +53,17 @@
     showSafe: true,
     media: null,     // HTMLImageElement | HTMLVideoElement currently drawn
     mediaUrl: null,  // object URL to revoke when replaced
+    showText: false,
+    text: 'POV: your caption goes here',
+    textSize: 64,                          // frame px (of 1080 wide)
+    box: { x: 10, y: 38, w: 74, h: 10 },  // percent of frame, like zones
   };
 
   /* ------------------------------------------------------------ prefs */
 
   const PREF_KEY = 'safezone:prefs:v1';
-  const PREF_FIELDS = ['platform', 'fit', 'opacity', 'showZones', 'showLabels', 'showSafe'];
+  const PREF_FIELDS = ['platform', 'fit', 'opacity', 'showZones', 'showLabels', 'showSafe',
+    'showText', 'text', 'textSize', 'box'];
 
   function loadPrefs() {
     try {
@@ -59,6 +72,9 @@
         if (k in saved && typeof saved[k] === typeof state[k]) state[k] = saved[k];
       });
     } catch (_) { /* storage unavailable: defaults are fine */ }
+    const b = state.box;
+    if (!b || ![b.x, b.y, b.w, b.h].every(Number.isFinite)) state.box = { x: 10, y: 38, w: 74, h: 10 };
+    state.box = clampBox(state.box);
     if (state.platform !== ALL && !PLATFORMS[state.platform]) state.platform = 'tiktok';
   }
 
@@ -286,6 +302,163 @@
     }
     els.overlay.replaceChildren(...nodes);
     els.platformNote.textContent = p.notes;
+    updateTextStatus();
+  }
+
+  /* ---------------------------------------------------------- text box */
+
+  const MIN_W = 8;   // percent
+  const MIN_H = 3;   // percent
+  const EPS = 1e-6;
+
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  function clampBox(b) {
+    const w = clamp(b.w, MIN_W, 100);
+    const h = clamp(b.h, MIN_H, 100);
+    return { x: clamp(b.x, 0, 100 - w), y: clamp(b.y, 0, 100 - h), w, h };
+  }
+
+  const intersects = (a, b) =>
+    a.x < b.x + b.w - EPS && a.x + a.w > b.x + EPS && a.y < b.y + b.h - EPS && a.y + a.h > b.y + EPS;
+
+  const contains = (outer, inner) =>
+    inner.x >= outer.x - EPS && inner.y >= outer.y - EPS &&
+    inner.x + inner.w <= outer.x + outer.w + EPS && inner.y + inner.h <= outer.y + outer.h + EPS;
+
+  /**
+   * Checks the text box against every zone of the current platform,
+   * whether or not the zones are currently drawn.
+   * status: 'bad' overlaps UI, 'warn' clear of UI but outside the safe
+   * margin, 'ok' fully inside the safe area.
+   */
+  function evaluateText() {
+    const p = getPlatform(state.platform);
+    const hits = p.zones.filter((z) => intersects(state.box, z));
+    const inSafe = p.safe.w > 0 && contains(p.safe, state.box);
+    return { hits, inSafe, status: hits.length ? 'bad' : inSafe ? 'ok' : 'warn' };
+  }
+
+  /** Positions the box and grows it if the wrapped text needs more height. */
+  function layoutTextbox() {
+    const tb = els.textbox;
+    tb.hidden = !state.showText;
+    if (!state.showText) return;
+    tb.style.setProperty('--fs', String(state.textSize));
+    if (els.textboxText.textContent !== state.text) els.textboxText.textContent = state.text;
+    place(tb, state.box);
+    const stageH = els.stage.clientHeight;
+    if (stageH > 0) {
+      const needH = (els.textboxText.scrollHeight / stageH) * 100;
+      if (needH > state.box.h + 0.05) {
+        state.box = clampBox(Object.assign({}, state.box, { h: needH }));
+        place(tb, state.box);
+      }
+    }
+  }
+
+  function updateTextStatus() {
+    const zoneEls = els.overlay.querySelectorAll('.zone');
+    if (!state.showText) {
+      zoneEls.forEach((z) => z.classList.remove('is-hit'));
+      els.textbox.removeAttribute('data-status');
+      els.textStatus.textContent = '';
+      els.textStatus.removeAttribute('data-status');
+      return;
+    }
+    const r = evaluateText();
+    const hitIds = new Set(r.hits.map((z) => z.id));
+    zoneEls.forEach((z) => z.classList.toggle('is-hit', hitIds.has(z.dataset.zone)));
+    els.textbox.dataset.status = r.status;
+    els.textStatus.dataset.status = r.status;
+    if (r.status === 'bad') {
+      const names = Array.from(new Set(r.hits.map((z) => z.label)));
+      els.textStatus.textContent = 'Covered by: ' + names.join(', ');
+    } else if (r.status === 'warn') {
+      els.textStatus.textContent = 'Clear of UI, but outside the recommended safe margin.';
+    } else {
+      els.textStatus.textContent = 'Inside the safe area.';
+    }
+  }
+
+  function refreshText() {
+    layoutTextbox();
+    updateTextStatus();
+  }
+
+  function bindTextbox() {
+    let drag = null;
+
+    els.textbox.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const rect = els.stage.getBoundingClientRect();
+      drag = {
+        mode: e.target === els.textboxHandle ? 'resize' : 'move',
+        x0: e.clientX,
+        y0: e.clientY,
+        box: Object.assign({}, state.box),
+        sw: rect.width,
+        sh: rect.height,
+      };
+      try { els.textbox.setPointerCapture(e.pointerId); } catch (_) { /* pointer already gone */ }
+      els.textbox.classList.add('is-dragging');
+      els.textbox.focus({ preventScroll: true });
+      e.preventDefault();
+    });
+
+    els.textbox.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = ((e.clientX - drag.x0) / drag.sw) * 100;
+      const dy = ((e.clientY - drag.y0) / drag.sh) * 100;
+      const b = drag.box;
+      if (drag.mode === 'move') {
+        state.box = { x: clamp(b.x + dx, 0, 100 - b.w), y: clamp(b.y + dy, 0, 100 - b.h), w: b.w, h: b.h };
+      } else {
+        state.box = {
+          x: b.x,
+          y: b.y,
+          w: clamp(b.w + dx, MIN_W, 100 - b.x),
+          h: clamp(b.h + dy, MIN_H, 100 - b.y),
+        };
+      }
+      refreshText();
+    });
+
+    const endDrag = () => {
+      if (!drag) return;
+      drag = null;
+      els.textbox.classList.remove('is-dragging');
+      savePrefs();
+    };
+    els.textbox.addEventListener('pointerup', endDrag);
+    els.textbox.addEventListener('pointercancel', endDrag);
+
+    // Arrow keys nudge the box; Shift moves in bigger steps.
+    els.textbox.addEventListener('keydown', (e) => {
+      const step = e.shiftKey ? 5 : 0.5;
+      const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      state.box = clampBox({ x: state.box.x + d[0], y: state.box.y + d[1], w: state.box.w, h: state.box.h });
+      refreshText();
+      savePrefs();
+    });
+
+    els.showText.addEventListener('change', () => {
+      state.showText = els.showText.checked;
+      update();
+    });
+    els.textInput.addEventListener('input', () => {
+      state.text = els.textInput.value;
+      refreshText();
+    });
+    els.textInput.addEventListener('change', savePrefs);
+    els.textSize.addEventListener('input', () => {
+      state.textSize = Number(els.textSize.value);
+      els.textSizeOut.value = state.textSize + ' px';
+      refreshText();
+    });
+    els.textSize.addEventListener('change', savePrefs);
   }
 
   /* ------------------------------------------------------------ sync UI */
@@ -303,11 +476,18 @@
     els.opacity.value = String(Math.round(state.opacity * 100));
     els.opacityOut.value = Math.round(state.opacity * 100) + '%';
     els.opacity.disabled = !state.showZones;
+    els.showText.checked = state.showText;
+    if (els.textInput.value !== state.text) els.textInput.value = state.text;
+    els.textInput.disabled = !state.showText;
+    els.textSize.disabled = !state.showText;
+    els.textSize.value = String(state.textSize);
+    els.textSizeOut.value = state.textSize + ' px';
   }
 
   function update() {
     syncControls();
-    renderOverlay();
+    layoutTextbox();
+    renderOverlay(); // also refreshes the text status
     savePrefs();
   }
 
@@ -385,6 +565,7 @@
     // Keep --k (stage px per frame px) current so labels and text scale.
     const setScale = () => {
       els.stage.style.setProperty('--k', String(els.stage.clientWidth / W));
+      if (state.showText) refreshText();
     };
     if ('ResizeObserver' in window) new ResizeObserver(setScale).observe(els.stage);
     else window.addEventListener('resize', setScale);
@@ -397,6 +578,7 @@
   buildPlatformButtons();
   buildLegend();
   bindEvents();
+  bindTextbox();
   drawFrame();
   update();
 })();

@@ -26,6 +26,10 @@
       <div class="stage" id="stage">
         <canvas id="frame" width="1080" height="1920" aria-label="Frame preview"></canvas>
         <div class="overlay" id="overlay" aria-hidden="true"></div>
+        <div class="textbox" id="textbox" tabindex="0" role="group" aria-label="Test text box. Drag to move, arrow keys to nudge, Shift for bigger steps." hidden>
+          <div class="textbox-text" id="textboxText"></div>
+          <span class="textbox-handle" id="textboxHandle" title="Drag to resize" aria-hidden="true"></span>
+        </div>
       </div>
       <ul class="legend" id="legend" aria-label="Legend"></ul>
     </section>
@@ -68,6 +72,21 @@
         </div>
         <label class="switch"><input type="checkbox" id="showLabels" checked><span>Zone labels</span></label>
         <label class="switch"><input type="checkbox" id="showSafe" checked><span>Safe-area outline</span></label>
+      </div>
+
+      <div class="card">
+        <h2>Test text</h2>
+        <label class="switch"><input type="checkbox" id="showText"><span>Show text box</span></label>
+        <div class="field">
+          <label class="field-label" for="textInput">Text</label>
+          <textarea id="textInput" rows="2" spellcheck="false"></textarea>
+        </div>
+        <div class="field">
+          <label class="field-label" for="textSize">Size <output id="textSizeOut">64 px</output></label>
+          <input type="range" id="textSize" min="24" max="160" step="2" value="64">
+        </div>
+        <p class="status" id="textStatus" role="status" aria-live="polite"></p>
+        <p class="hint">Drag the box on the preview, pull the corner to resize. It turns red when it overlaps UI.</p>
       </div>
     </section>
   </main>
