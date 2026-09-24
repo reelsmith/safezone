@@ -4,6 +4,8 @@ A browser tool for short-form video creators. Drop in a frame from your video an
 
 **Live demo: https://reelsmith.github.io/safezone/**
 
+![safezone showing the TikTok UI zones over a blank 9:16 frame](docs/screenshot.png)
+
 ## Why
 
 Every vertical video app covers part of the frame with its own UI: feed tabs at the top, a column of like/comment/share buttons on the right, and the username, caption and sound line along the bottom. Text that looks fine in your editor can end up half hidden once it's posted. Each app covers a slightly different area, so text that's clear on one can be covered on another.
@@ -75,6 +77,16 @@ If the numbers are off, corrections are very welcome:
 Adding a new platform works the same way: add another entry to `platforms` in `zones.js` and it shows up in the switcher automatically.
 
 Bug reports and other improvements are welcome too. Please keep the project dependency-free and buildless.
+
+## Roadmap
+
+- [ ] Re-measure every zone against real screenshots from current app versions
+- [ ] Facebook Reels and Snapchat Spotlight
+- [ ] A "long caption" mode for TikTok, where the caption area grows with "See more"
+- [ ] Load a `.srt` file and step through each caption line against the zones
+- [ ] Share a check as a link, with the platform and text box position in the URL
+
+Found a zone that's off? Open an issue with a screenshot and I'll update it.
 
 ## License
 
